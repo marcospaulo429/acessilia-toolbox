@@ -178,6 +178,33 @@ def test_extracts_table_ast_from_docling_table_cells(tmp_path: Path) -> None:
     assert ast["body"][0]["cells"][1]["colspan"] == 2
 
 
+def test_docling_grid_keeps_empty_cells_omitted_from_table_cells(tmp_path: Path) -> None:
+    empty = _docling_cell("", 0, 0, header=True)
+    y1, y2 = _docling_cell("1982", 0, 1, header=True), _docling_cell("1983", 0, 2, header=True)
+    label, span = _docling_cell("Exports", 1, 0), _docling_cell("210,929", 1, 1, cs=2)
+    data = {
+        "table_cells": [y1, y2, label, span],  # Docling omits the empty corner cell
+        "num_rows": 2,
+        "num_cols": 3,
+        "grid": [[empty, y1, y2], [label, span, span]],
+    }
+    document = FakeDocument(
+        [
+            body_root(),
+            item("table", "#/tables/0", text="", data=data,
+                 prov=[provenance(box=bbox(50, 100, 550, 200), charspan=None)]),
+        ],
+        width=600,
+        height=800,
+    )
+    _, manifest = build(tmp_path, document)
+
+    ast = next(e for e in manifest.elements if e.type == "table").metadata["table_ast"]
+    assert [c["text"] for c in ast["header"][0]["cells"]] == ["", "1982", "1983"]
+    assert [c["text"] for c in ast["body"][0]["cells"]] == ["Exports", "210,929"]
+    assert ast["body"][0]["cells"][1]["colspan"] == 2
+
+
 def test_table_elements_carry_a_linearization_obligation(tmp_path: Path) -> None:
     document = FakeDocument(
         [

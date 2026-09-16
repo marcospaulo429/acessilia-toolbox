@@ -770,7 +770,21 @@ def _table_ast_from_docling_cells(item: Any) -> dict[str, Any] | None:
     structure can be re-emitted as HTML without column drift.
     """
     data = getattr(item, "data", None)
-    cells = _cell_attr(data, "table_cells") if data is not None else None
+    if data is None:
+        return None
+    # ``grid`` is the dense num_rows x num_cols view (span cells repeated); it
+    # keeps empty cells that ``table_cells`` may omit. Fall back to table_cells.
+    grid = _cell_attr(data, "grid")
+    cells: list[Any] = []
+    if isinstance(grid, list) and grid and all(isinstance(row, list) for row in grid):
+        for r, row in enumerate(grid):
+            for c, cell in enumerate(row):
+                r0 = _cell_attr(cell, "start_row_offset_idx", r)
+                c0 = _cell_attr(cell, "start_col_offset_idx", c)
+                if r0 == r and c0 == c:
+                    cells.append(cell)
+    if not cells:
+        cells = _cell_attr(data, "table_cells")
     if not isinstance(cells, list) or not cells:
         return None
 

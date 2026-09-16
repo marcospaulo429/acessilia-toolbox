@@ -37,6 +37,9 @@ class DoclingProvider:
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")
+        # docling-serve: re-OCR everything instead of trusting the embedded text layer.
+        # Needed for page images, where Docling otherwise duplicates text blocks.
+        self.force_ocr = bool(descriptor.config.get("force_ocr", False))
 
     def execute(
         self,
@@ -66,6 +69,7 @@ class DoclingProvider:
                 "extractor": "docling-serve",
                 "base_url": self.base_url,
                 "capability": capability_id,
+                "force_ocr": self.force_ocr,
                 "component_versions": _components(versions),
                 **dict(parameters or {}),
             },
@@ -118,7 +122,7 @@ class DoclingProvider:
             response = client.post(
                 CONVERT_PATH,
                 files={"files": (filename, payload, media_type)},
-                data={"to_formats": ["json"]},
+                data={"to_formats": ["json"], "force_ocr": "true" if self.force_ocr else "false"},
             )
             response.raise_for_status()
         except httpx.TimeoutException as exc:

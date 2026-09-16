@@ -184,6 +184,29 @@ def test_factory_resolves_the_registered_adapter() -> None:
     assert isinstance(create_adapter(descriptor()), DoclingProvider)
 
 
+def test_force_ocr_is_forwarded_when_configured() -> None:
+    seen: dict[str, bytes] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"docling-serve": "1.32.0"})
+        seen["body"] = request.read()
+        return httpx.Response(200, json={"document": {"json_content": DOCUMENT}})
+
+    default = provider_with(handler)
+    extract(default)
+    assert b'name="force_ocr"\r\n\r\nfalse' in seen["body"]
+    assert default.force_ocr is False
+
+    forced = DoclingProvider(descriptor(config={"force_ocr": True}))
+    forced._client = lambda timeout=None: httpx.Client(  # type: ignore[method-assign]
+        transport=httpx.MockTransport(handler), base_url=forced.base_url
+    )
+    result = extract(forced)
+    assert b'name="force_ocr"\r\n\r\ntrue' in seen["body"]
+    assert result.configuration["force_ocr"] is True
+
+
 def test_factory_rejects_providers_without_an_adapter() -> None:
     from acessilia_toolbox.core.errors import ProviderNotFoundError
 

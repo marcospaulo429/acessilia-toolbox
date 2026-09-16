@@ -10,7 +10,9 @@ import hashlib
 import mimetypes
 import re
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
@@ -457,9 +459,15 @@ def _build_pages(document: Any, elements: list[ManifestElement]) -> list[PageDes
 
     pages: list[PageDescriptor] = []
     raw_pages = getattr(document, "pages", {}) or {}
-    for page_number, page in sorted(raw_pages.items(), key=lambda pair: int(pair[0])):
-        number = int(page_number)
-        size = getattr(page, "size", None)
+    if isinstance(raw_pages, Mapping):
+        page_items = [(int(k), getattr(p, "size", None)) for k, p in raw_pages.items()]
+    else:
+        # sequence of page dicts (MineruDocument): 1-based by position
+        page_items = [
+            (index, SimpleNamespace(width=p.get("width"), height=p.get("height")))
+            for index, p in enumerate(raw_pages, start=1)
+        ]
+    for number, size in sorted(page_items, key=lambda pair: pair[0]):
         pages.append(
             PageDescriptor(
                 page_number=number,

@@ -202,6 +202,34 @@ def test_document_facade_full_text_preserves_reading_order() -> None:
     assert text.index("Relatório Anual") < text.index("Resultados do exercício")
 
 
+def test_document_facade_iterate_items_matches_builder_contract() -> None:
+    document = _facade()
+    items = list(document.iterate_items(with_groups=True, traverse_pictures=True))
+    labels = [item.label.value for item, _level in items]
+    assert labels == ["section_header", "text", "table", "formula", "picture"]
+    title, body, table, formula, picture = (item for item, _level in items)
+    assert title.level == 1 and title.prov[0].page_no == 1
+    assert body.text == "Resultados do exercício"
+    assert table.text.startswith("<table>")
+    assert formula.text == "$$E = mc^2$$"
+    assert picture.text is None
+    assert (table.prov[0].bbox.l, table.prov[0].bbox.b) == (50.0, 400.0)
+    assert table.prov[0].bbox.coord_origin.value == "TOPLEFT"
+    assert document.num_pages() == 2
+
+
+def test_builder_accepts_mineru_document() -> None:
+    from acessilia_toolbox.core.normalization.builder import _build_elements, _build_pages
+
+    document = _facade()
+    elements = _build_elements(document, enable_callouts=False)
+    expected = ["heading", "paragraph", "table", "formula", "picture"]
+    assert [element.type for element in elements] == expected
+    pages = _build_pages(document, elements)
+    assert [page.page_number for page in pages] == [1, 2]
+    assert pages[0].width == 595 and len(pages[0].element_ids) == 5
+
+
 # ── provider adapter ─────────────────────────────────────────────────
 
 

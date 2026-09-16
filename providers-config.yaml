@@ -5,6 +5,8 @@ providers:
     endpoint: ${DOCLING_SERVE_URL}
     health_path: /health
     timeout_seconds: 600
+    config:
+      force_ocr: true
     capabilities:
       - document.structure.extract
     media_types:

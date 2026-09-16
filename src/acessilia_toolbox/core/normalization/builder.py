@@ -706,6 +706,10 @@ def _safe_metadata(item: Any, *, element_type: str | None = None) -> dict[str, A
 
 
 def _extract_table_ast(item: Any) -> dict[str, Any] | None:
+    docling_ast = _table_ast_from_docling_cells(item)
+    if docling_ast is not None:
+        return docling_ast
+
     raw_candidates: list[Any] = []
     for attr_name in (
         "table_ast",
@@ -751,6 +755,62 @@ def _extract_table_ast(item: Any) -> dict[str, Any] | None:
         if table_ast is not None:
             return table_ast
     return None
+
+
+def _cell_attr(cell: Any, name: str, default: Any = None) -> Any:
+    if isinstance(cell, dict):
+        return cell.get(name, default)
+    return getattr(cell, name, default)
+
+
+def _table_ast_from_docling_cells(item: Any) -> dict[str, Any] | None:
+    """Build a table_ast from Docling ``TableItem.data.table_cells``.
+
+    Preserves the grid faithfully (spans, header flags and empty cells) so the
+    structure can be re-emitted as HTML without column drift.
+    """
+    data = getattr(item, "data", None)
+    cells = _cell_attr(data, "table_cells") if data is not None else None
+    if not isinstance(cells, list) or not cells:
+        return None
+
+    rows: dict[int, list[tuple[int, dict[str, Any]]]] = {}
+    for cell in cells:
+        r0 = _cell_attr(cell, "start_row_offset_idx")
+        c0 = _cell_attr(cell, "start_col_offset_idx")
+        if not isinstance(r0, int) or not isinstance(c0, int):
+            continue
+        text = _cell_attr(cell, "text", "") or ""
+        entry: dict[str, Any] = {"text": str(text).strip()}
+        rs = _cell_attr(cell, "row_span", 1)
+        cs = _cell_attr(cell, "col_span", 1)
+        if isinstance(rs, int) and rs > 1:
+            entry["rowspan"] = rs
+        if isinstance(cs, int) and cs > 1:
+            entry["colspan"] = cs
+        if _cell_attr(cell, "column_header", False) is True:
+            entry["header"] = True
+        rows.setdefault(r0, []).append((c0, entry))
+
+    if not rows:
+        return None
+
+    header: list[dict[str, Any]] = []
+    body: list[dict[str, Any]] = []
+    for r0 in sorted(rows):
+        ordered = [entry for _, entry in sorted(rows[r0], key=lambda pair: pair[0])]
+        row = {"cells": ordered}
+        if body or not all(entry.get("header") for entry in ordered):
+            body.append(row)
+        else:
+            header.append(row)
+
+    if not body and not header:
+        return None
+    result: dict[str, Any] = {"body": body or header}
+    if header and body:
+        result["header"] = header
+    return result
 
 
 def _infer_title(source_path: Path, elements: list[ManifestElement]) -> str:

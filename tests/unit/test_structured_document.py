@@ -131,6 +131,53 @@ def test_extracts_table_ast_metadata(tmp_path: Path) -> None:
     assert table_elements[0].metadata
 
 
+def _docling_cell(text: str, r: int, c: int, *, rs: int = 1, cs: int = 1, header: bool = False) -> dict:
+    return {
+        "text": text,
+        "row_span": rs,
+        "col_span": cs,
+        "start_row_offset_idx": r,
+        "end_row_offset_idx": r + rs,
+        "start_col_offset_idx": c,
+        "end_col_offset_idx": c + cs,
+        "column_header": header,
+        "row_header": False,
+        "row_section": False,
+    }
+
+
+def test_extracts_table_ast_from_docling_table_cells(tmp_path: Path) -> None:
+    cells = [
+        _docling_cell("", 0, 0, header=True),
+        _docling_cell("1982", 0, 1, header=True),
+        _docling_cell("1983", 0, 2, header=True),
+        _docling_cell("Exports", 1, 0),
+        _docling_cell("210,929", 1, 1, cs=2),
+    ]
+    document = FakeDocument(
+        [
+            body_root(),
+            item(
+                "table",
+                "#/tables/0",
+                text="",
+                data={"table_cells": cells, "num_rows": 2, "num_cols": 3, "grid": []},
+                prov=[provenance(box=bbox(50, 100, 550, 200), charspan=None)],
+            ),
+        ],
+        width=600,
+        height=800,
+    )
+    _, manifest = build(tmp_path, document)
+
+    table = next(e for e in manifest.elements if e.type == "table")
+    ast = table.metadata["table_ast"]
+    assert [c["text"] for c in ast["header"][0]["cells"]] == ["", "1982", "1983"]
+    assert all(c.get("header") for c in ast["header"][0]["cells"])
+    assert [c["text"] for c in ast["body"][0]["cells"]] == ["Exports", "210,929"]
+    assert ast["body"][0]["cells"][1]["colspan"] == 2
+
+
 def test_table_elements_carry_a_linearization_obligation(tmp_path: Path) -> None:
     document = FakeDocument(
         [
